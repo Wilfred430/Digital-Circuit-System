@@ -48,7 +48,6 @@ logic [11:0] result [0:7][0:7];
 //--------------------------------------------------------------------------------------
 
 // register in_mode signal
-assign work_type = (in_valid)? in_mode : work_type;
 
 // reset all output signal
 always_ff @(posedge clk,negedge rst_n)
@@ -67,7 +66,11 @@ begin
                 begin
                         out_data <= 12'b0;
                 end
-        end else if(out_finish)
+		end else if(in_valid)
+		begin
+			work_type <= in_mode;
+		end
+		else if(out_finish)
         begin
                 out_act_idx <= 4'bX;
                 out_wgt_idx <= 4'bX;
@@ -77,12 +80,13 @@ begin
                 next <= 0;
                 output_next<=4'b0;
                 input_start <= 0;
+				work_type <= 'bX;
                 for(i=0;i<8;i=i+1)
                 begin
                         out_data <= 12'b0;
                 end
         end
-        else if(!work_type && next < 8)
+        else if(((!work_type) || (work_type)) && next < 8)
         begin
                 input_start <= 1;
                 out_act_idx <= {1'b0,next};
