@@ -114,12 +114,11 @@ always_ff @(posedge clk or negedge rst_n) begin
             
             S_INPUT: begin
                 // Set indices for input phase
-                out_act_idx <= {1'b0, input_counter};
-                out_wgt_idx <= {1'b0, input_counter};
+                out_act_idx <= {1'b0, input_counter+4'd1};
+                out_wgt_idx <= {1'b0, input_counter+4'd1};
                 
                 // Increment input counter
-                if (input_counter < 8)
-                    input_counter <= input_counter + 4'd1;
+                input_counter <= input_counter + 4'd1;
             end
             
             S_COMPUTE: begin
@@ -138,7 +137,11 @@ always_ff @(posedge clk or negedge rst_n) begin
                 
                 // Set finish flag on last row
                 if (output_counter == 7)
+                begin
                     out_finish <= 1'b1;
+                    out_act_idx <= 4'd0;
+                    out_wgt_idx <= 4'd0;
+                end
                 else
                     output_counter <= output_counter + 4'd1;
             end
@@ -212,7 +215,7 @@ always_comb begin
     end
     
     // Compute based on operation mode
-    if (current_state == S_COMPUTE) begin
+    if (current_state == S_COMPUTE || current_state == S_OUTPUT) begin
         if (!work_type) begin
             // Matrix multiplication: result[t][k] = Σ activation[t][n] × weight[n][k]
             for (int t = 0; t < 8; t++) begin
