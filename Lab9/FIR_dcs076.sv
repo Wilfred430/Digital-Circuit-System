@@ -34,28 +34,7 @@ logic [15:0] regs_x;
 //---------------------------------------------------------------------
 //   Your design                        
 //---------------------------------------------------------------------
-// always_comb 
-// begin
-//     if(weight_valid)
-//     begin
-//         regs_b0 = b0;
-//         regs_b1 = b1;
-//         regs_b2 = b2;
-//         regs_b3 = b3;
-//     end else if(in_valid || out_valid || counter > 0)
-//     begin
-//         regs_b0 = regs_b0;
-//         regs_b1 = regs_b1;
-//         regs_b2 = regs_b2;
-//         regs_b3 = regs_b3;
-//     end else
-//     begin
-//         regs_b0 = 16'b0;
-//         regs_b1 = 16'b0;
-//         regs_b2 = 16'b0;
-//         regs_b3 = 16'b0;
-//     end
-// end
+
 always_ff @(posedge clk,negedge rst_n)
 begin
     if(!rst_n)
