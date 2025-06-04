@@ -25,23 +25,23 @@ output logic [4:0]out_data;
 // ---------------------------------------------------------------------
 // logic declaration                 
 // ---------------------------------------------------------------------	
-logic [3:0] regis[2];
+logic [3:0] regis [2];
+logic [3:0] out_interact [2];
 integer next;
-integer next_silde;
-logic pre_dvalid;
-logic finish;
 
 typedef enum logic [2:0]
 {
 	S_wait_input1,
 	S_wait_input2,
 	S_send_data,
+	S_keep_send,
 	S_idle,
-	S_get_dout,
+	S_get_dout_1,
+	S_get_dout_2,
 	S_out
 } state_t ;
 
-state_t current_state_1,current_state_2,next_state_2;
+state_t current_state_1,current_state_2,next_state_2,next_state_1;
 logic sidle_t;
 logic sready_t;
 logic [3:0] din_t;
@@ -58,49 +58,54 @@ Handshake_syn sync(
 					.sready(sready_t), 
 					.din(din_t), 
 					.sidle(sidle_t),
-					.dbusy(0),
+					.dbusy(1'b0),
 					.dvalid(dvalid_t),
 					.dout(dout_t)
 );
 
-always_ff @(posedge clk_1,negedge rst_n)
+always_comb
 begin
-    if(!rst_n)
-	begin
-        current_state_1 <= S_wait_input1;
-		next_silde <= 0;
-		sready_t <= 0;
-		din_t <= 4'b0;
-	end else
-	begin
-		case(current_state_1)
+	next_state_1 = current_state_1;
+			case(current_state_1)
 			S_wait_input1:begin
-				if(in_valid) current_state_1 <= S_wait_input2;
-				next_silde <= 0;
+				if(in_valid)
+				begin
+					next_state_1 = S_wait_input2;
+				end
 			end
 			S_wait_input2:begin
-				current_state_1 <= S_send_data;
+				next_state_1 = S_send_data;
 			end
 			S_send_data:begin
-				if(sidle_t)
+				if(next < 2) 
 				begin
-					sready_t <= 1;
-					din_t <= regis[next_silde];
-					next_silde <= next_silde + 1;
+					next_state_1 = S_keep_send;
 				end
 				else
 				begin
-					sready_t <= 1;
+					next_state_1 = S_wait_input1;
 				end
-				if(next_silde > 1)
+			end
+			S_keep_send:begin
+				if(sidle_t)
 				begin
-					current_state_1 <= S_wait_input1;
+					next_state_1 = S_send_data;
 				end
 			end
 			default:begin
-				current_state_1 <= S_wait_input1;
+				next_state_1 = S_wait_input1;
 			end
 		endcase
+end
+
+always_ff @(posedge clk_1,negedge rst_n)
+begin
+	if(!rst_n)
+	begin
+		current_state_1 <= S_wait_input1;
+	end else
+	begin
+		current_state_1<= next_state_1;
 	end
 end
 
@@ -111,24 +116,53 @@ begin
 		next <= 0;
 		regis[0] <= 4'b0;
 		regis[1] <= 4'b0;
-	end 
-	else if(in_valid && (current_state_1 == S_wait_input1 || current_state_1 == S_wait_input2))
-	begin
-		regis[next] <= in_data;
-		next <= (next == 0) ? next+1 : 0; 
-	end else begin end
-end
-
-
-
-always_ff @(posedge clk_2,negedge rst_n)
-begin
-    if(!rst_n)
-	begin
-        current_state_2 <= S_idle;
+		sready_t <= 0;
+		din_t <= 4'b0;
 	end else
 	begin
-        current_state_2 <= next_state_2;
+		case(current_state_1)
+			S_wait_input1:begin
+				next <= 0;
+				if(in_valid)
+				begin
+					regis[0] <= in_data;
+				end
+			end
+			S_wait_input2:begin
+				next <= 0;
+				if(in_valid)
+				begin
+					regis[1] <= in_data;
+				end
+			end
+			S_send_data:begin
+				if(sidle_t)
+				begin
+					sready_t <= 1;
+					if(next == 0)
+					begin
+						din_t <= regis[0];
+					end else if(next == 1)
+					begin
+						din_t <= regis[1];
+					end else
+					begin
+						din_t <= 4'b0;
+					end
+					next <= next + 1;
+				end else if(!sidle_t)
+				begin
+					din_t <= 4'b0;
+					sready_t <= 0;
+				end
+			end
+			S_keep_send:begin
+				din_t <= 4'b0;
+				sready_t <= 0;
+			end
+			default:begin
+			end
+		endcase
 	end
 end
 
@@ -137,10 +171,13 @@ begin
     next_state_2 = current_state_2;
 	case(current_state_2)
 		S_idle:begin
-			if(!pre_dvalid && dvalid_t) next_state_2 = S_get_dout;
+			if(next == 1 && dvalid_t) next_state_2 = S_get_dout_1;
 		end
-		S_get_dout:begin
-			if(!pre_dvalid && dvalid_t) next_state_2 = S_out;
+		S_get_dout_1:begin
+			if(!dvalid_t) next_state_2 = S_get_dout_2;
+		end
+		S_get_dout_2:begin
+			if(dvalid_t) next_state_2 = S_out;
 		end
 		S_out:begin
 			next_state_2 = S_idle;
@@ -149,8 +186,17 @@ begin
 			next_state_2 = S_idle;
 		end
 	endcase
+end
 
-	pre_dvalid = dvalid_t;
+always_ff @(posedge clk_2,negedge rst_n)
+begin
+	if(!rst_n)
+	begin
+		current_state_2 <= S_idle;
+	end else 
+	begin 
+		current_state_2 <= next_state_2;
+	end
 end
 
 always_ff @(posedge clk_2,negedge rst_n)
@@ -159,19 +205,37 @@ begin
 	begin
 		out_valid <= 0;
 		out_data <= 5'b0;
-		finish <= 0;
-	end else if(finish) 
-	begin
-		finish <= 0;
-		out_valid <= 0;
-		out_data <= 5'b0;
+		out_interact[0] <= 4'b0;
+		out_interact[1] <= 4'b0;
+	end else 
+	begin 
+		case(current_state_2)
+		S_idle:begin
+			out_valid <= 0;
+			out_data <= 5'b0;
+			out_interact[0] <= 4'b0;
+			out_interact[1] <= 4'b0;
+		end
+		S_get_dout_1:begin
+			if(dvalid_t) 
+			begin
+				out_interact[0] <= dout_t;
+			end
+		end
+		S_get_dout_2:begin
+			if(dvalid_t)
+			begin
+				out_interact[1] <= dout_t;
+			end
+		end
+		S_out:begin
+			out_data <= out_interact[0] + out_interact[1];
+			out_valid <= 1;
+		end
+		default:begin
+		end
+	endcase
 	end
-	else if(current_state_2 == S_out)
-	begin
-		out_valid <= 1;
-		out_data <= regis[0] + regis[1];
-		finish <= 1;
-	end else begin end
 end
 		
 endmodule
