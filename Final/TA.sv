@@ -28,7 +28,15 @@ output logic m_read;
 output logic  [5:0] m_addr; 
 // output 
 output logic o_valid; 
-output logic [40:0] o_data; 
+output logic [40:0] o_data;
+
+type
+ 
+
+always_ff @(posedge clk, negedge rst_n)
+begin
+	
+end
 
 
 
